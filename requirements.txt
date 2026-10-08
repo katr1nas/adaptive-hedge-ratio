@@ -1,0 +1,40 @@
+# Data
+numpy
+pandas
+scipy
+statsmodels
+
+# Market data
+yfinance
+
+# Machine learning / regime detection
+scikit-learn
+hmmlearn
+
+# Kalman filtering
+pykalman
+
+# Visualization
+matplotlib
+seaborn
+plotly
+
+# Research / notebooks
+jupyter
+ipykernel
+nbformat
+
+# Testing
+pytest
+pytest-cov
+
+# Configuration
+pyyaml
+
+# Progress / utilities
+tqdm
+
+# Code quality
+ruff
+black
+mypy
