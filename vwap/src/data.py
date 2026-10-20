@@ -1,8 +1,10 @@
 import yfinance as yf
 import pandas as pd
 
-def load_data(symbols: list[str], period: str = '7d', interval: str = '1m') -> pd.DataFrame:
-    df = yf.download(symbols, period=period, interval=interval)
-    sym_1 = df.xs(symbols[0], axis=1, level='Ticker').copy()
-    sym_2 = df.xs(symbols[1], axis=1, level='Ticker').copy()
-    return sym_1, sym_2
+def load_data(symbol: str, period: str = '7d', interval: str = '1m') -> pd.DataFrame:
+    df = yf.download(symbol, period=period, interval=interval)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+    df.columns = [str(c).lower() for c in df.columns]
+    
+    return df

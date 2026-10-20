@@ -4,8 +4,8 @@ import pandas as pd
 from sessions import prepare_rth
 from event_study import EventStudy
 
-symbols = load_data(['ES=F', 'NQ=F'])
-df = symbols[0]
+symbol = load_data('ES')
+df = symbol
 
 df.columns = [
     str(c).lower() if isinstance(c, str) else c

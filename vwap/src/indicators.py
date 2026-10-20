@@ -1,49 +1,55 @@
 import pandas as pd
 import numpy as np
+from data import load_data
+from sessions import prepare_rth
 
 
 
 class Indicator:
     def __init__(self, df):
-        self.df = df
+        self.df = prepare_rth(df)
 
         required = {"high", "low", "close", "volume", "sessions"}
-        missing = required.difference(df.columns)
+        missing = required.difference(self.df.columns)
 
         if missing:
             raise ValueError(f"Missing columns: {sorted(missing)}")
 
-        if not df.index.is_monotonic_increasing:
+        if not self.df.index.is_monotonic_increasing:
             raise ValueError("Data must be sorted chronologically")
 
-        if df.index.has_duplicates:
+        if self.df.index.has_duplicates:
             raise ValueError("Duplicate timestamps detected")
         
+        if self.df["sessions"].isna().any():
+            raise ValueError("Session labels must not be missing")
+        
     def calculate_session_vwap(self) -> pd.Series:
-        prices = self.df[["high", "low", "close"]]
+        prices = self.df[["high", "low", "close"]].apply(
+            pd.to_numeric, errors="raise"
+            ).astype(float)
 
         if self.df.empty:
             return pd.Series(index=self.df.index, dtype=float, name="vwap")
+        
+        volume = pd.to_numeric(
+            self.df['volume'], errors='raise'
+        ).astype(float)
 
-        numeric_prices = prices.apply(pd.to_numeric, errors="coerce")
-
-        if numeric_prices.isna().any().any():
-            raise ValueError("Prices must be numeric and non-missing")
-
-        if not numeric_prices.map(lambda x: abs(x) != float("inf")).all().all():
+        if not np.isfinite(prices.to_numpy()).all():
             raise ValueError("Prices must be finite")
-
-        typical_price = (
-            self.df["high"] + self.df["low"] + self.df["close"]
-        ) / 3.0
-
-        price_volume = typical_price * self.df["volume"]
+        
+        if not np.isfinite(volume.to_numpy()).all() or (volume < 0).any():
+            raise ValueError("Volume must be finite and nonnegative")
+        
+        typical_price = prices.mean(axis=1) 
+        price_volume = typical_price * volume
 
         cumulative_pv = price_volume.groupby(
             self.df["sessions"], sort=False
         ).cumsum()
 
-        cumulative_volume = self.df["volume"].groupby(
+        cumulative_volume = volume.groupby(
             self.df["sessions"], sort=False
         ).cumsum()
 
@@ -82,14 +88,21 @@ class Indicator:
         sessions = self.df["sessions"]
         cumulative_volume = volume.groupby(sessions, sort=False).cumsum()
 
-        if (cumulative_volume <= 0).any():
-            raise ValueError("Cumulative session volume must be positive")
+        valid_volume = cumulative_volume > 0
+
 
         cumulative_pv = (prices * volume).groupby(sessions, sort=False).cumsum()
         cumulative_pv2 = (prices**2 * volume).groupby(sessions, sort=False).cumsum()
 
-        vwap = cumulative_pv / cumulative_volume
-        variance = (cumulative_pv2 / cumulative_volume - vwap**2).clip(lower=0)
+        vwap = cumulative_pv.div(
+            cumulative_volume.where(valid_volume)
+        )
+
+        second_moment = cumulative_pv2.div(
+            cumulative_volume.where(valid_volume)
+            )
+        
+        variance = (second_moment - vwap**2).clip(lower=0)
         omega = np.sqrt(variance)
 
         result = pd.DataFrame(index=self.df.index)
@@ -103,12 +116,44 @@ class Indicator:
     
 
     def get_signal(self) -> pd.DataFrame:
-        result = self.calculate_vwap_bands()
+        bands = self.calculate_vwap_bands()
 
-        band_width = result['upper_2'] - result['lower_2']
+        close = pd.to_numeric(self.df['close'], errors='raise')
+        lower = bands['lower_2']
+        upper = bands['upper_2']
+        same_session = self.df['sessions'].eq(
+            self.df['sessions'].shift(1)
+        )
+
+        valid_bands = (
+            np.isfinite(upper)
+            & np.isfinite(lower)
+            & (upper > lower)
+            )
+ 
+
+        previous_valid = valid_bands.shift(1, fill_value=False)
+
+        cross_below = (
+            same_session
+            & previous_valid
+            & valid_bands
+            & (close.shift(1) >= lower.shift(1))
+            & (close < lower)
+        )
+
+        cross_above = (
+            same_session
+            & previous_valid
+            & valid_bands
+            & (close.shift(1) <= upper.shift(1))
+            & (close > upper)
+        )
 
         signals = pd.DataFrame(index=self.df.index)
-        signals["long"] = (self.df["close"] < result["lower_2"]) & (band_width > 0)
-        signals["short"] = (self.df["close"] > result["upper_2"]) & (band_width > 0)
+        signals["long"] = cross_below.fillna(False).astype(bool)
+        signals["short"] = cross_above.fillna(False).astype(bool)
 
         return signals
+       
+    
