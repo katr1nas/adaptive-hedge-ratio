@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import adfuller, coint
-from data.loader import load_data
+from kalman_hedge_ratio.loader import load_data
 
 
 class Strategy:
