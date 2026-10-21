@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import adfuller, coint
-from kalman_hedge_ratio.loader import load_data
+from loader import load_data
 
 
 class Strategy:
@@ -23,6 +23,7 @@ class Strategy:
     def get_signals(self):
         data = load_data(self.symbols, self.start, self.end)
         close = data['Close'].squeeze()
+        self.close = close
 
         self.la = np.log(close[self.symbols[0]])
         self.lb = np.log(close[self.symbols[1]])
@@ -77,25 +78,47 @@ class Strategy:
 
     def backtest(self):
         beta = self.beta_t if self.use_kalman else self.beta
-        ret = self.la.diff() - beta * self.lb.diff()
-        pos = self.positions.shift(1)
-        trades = self.positions.diff().abs().shift(1)
-        self.pnl = (pos * ret - trades * self.cost).fillna(0)
 
-        test = self.pnl.iloc[self.split:]
-        sharpe = test.mean() / test.std() * np.sqrt(252) if test.std() > 0 else np.nan
+        a_return = self.close[self.symbols[0]].pct_change()
+        b_return = self.close[self.symbols[1]].pct_change()
 
+        position = self.positions.shift(1).fillna(0)
+
+        turnover = self.positions.diff().abs().shift(1).fillna(0)
+
+        gross_exposure = 1 + abs(beta)
+        gross_return = position * (
+            a_return - beta * b_return
+        ) / gross_exposure
+
+        self.returns = (
+            gross_return - turnover * self.cost
+        ).fillna(0)
+
+        test_returns = self.returns.iloc[self.split:].copy()
+        test_returns.name = 'return'
+        test_returns.index.name = 'date'
+
+        sharpe = (
+            test_returns.mean() / test_returns.std() * np.sqrt(252)
+            if test_returns.std() > 0
+            else np.nan
+        )
+        
         return {
-            "beta": self.beta,
-            "adf_p": self.adf_p,
-            "coint_p": self.coint_p,
-            "half_life": self.half_life,
-            "window": self.window,
-            "test_sharpe": sharpe,
-            "test_return": test.sum(),
-            "test_trades": int(self.positions.iloc[self.split:].diff().abs().sum() / 2),
-        }
-    
+        "beta": self.beta,
+        "adf_p": self.adf_p,
+        "coint_p": self.coint_p,
+        "half_life": self.half_life,
+        "window": self.window,
+        "test_sharpe": sharpe,
+        "test_return": (1 + test_returns).prod() - 1,
+        "test_trades": int(
+            self.positions.iloc[self.split:].diff().abs().sum() / 2
+        ),
+        "test_returns": test_returns,
+    }
+     
 
     def kalman_filter(self, delta=1e-4, warmup=50):
         la = self.la.values - self.la[:self.split].mean()
@@ -139,6 +162,9 @@ class Strategy:
         self.signals[self.z_score < -self.entry] = 1
 
         return self.z_score, self.signals
+
+
+
 
 
         

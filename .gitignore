@@ -1,1 +1,4 @@
-.DS_Store
+outputs/*.csv
+.venv/
+__pycache__/
+*.pyc

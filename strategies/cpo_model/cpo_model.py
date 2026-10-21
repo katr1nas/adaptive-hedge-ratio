@@ -6,6 +6,7 @@ import numpy as np
 from train_test_split import train_test_split
 from get_result import get_result
 from metrics import sharpe_ratio
+from pathlib import Path
 
 df = loader('ES=F', '2017-01-01', '2026-01-01')
 
@@ -107,6 +108,29 @@ print("Fixed Sharpe:", sharpe_ratio(fixed_returns))
 print("CPO Total Return:", (1 + cpo_returns).prod() - 1)
 print("Fixed Total Return:", (1 + fixed_returns).prod() - 1)
 
+def generate_returns():
+    test_pred = cpo_rfg.predict(X_test)
+    best_daily_test = get_result(X_test, test_pred, y_test)
+
+    cpo_returns = best_daily_test['actual_return'].copy()
+    next_dates = pd.Series(df.index[1:].values, index=df.index[:-1])
+    cpo_returns.index = pd.DatetimeIndex(next_dates.reindex(cpo_returns.index).values)
+
+    cpo_returns.name = 'return'
+    cpo_returns.index.name = 'date'
+    cpo_returns = cpo_returns.dropna().sort_index()
+
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    output =  PROJECT_ROOT / "outputs" / "cpo_returns.csv"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    cpo_returns.to_frame().to_csv(output)
+
+    return cpo_returns
+
+if __name__ == "__main__":
+    cpo_returns = generate_returns()
+    print('CPO sharpe:', sharpe_ratio(cpo_returns))
+    print("CPO Total Return:", (1 + cpo_returns).prod() - 1)
 
 
 
