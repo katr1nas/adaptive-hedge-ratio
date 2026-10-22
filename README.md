@@ -44,11 +44,15 @@ The `strategies/cpo_model/` experiment studies whether a model can **select mean
 
 For a rolling window $n$:
 
-$$z_t=\frac{P_t-\operatorname{SMA}_n(P)_t}{\operatorname{Std}_n(P)_t}.$$
+$$z_t=\frac{P_t-\text{SMA}_n(P)_t}{\text{Std}_n(P)_t}.$$
 
 For threshold $h$, the implemented signal is:
 
-$$s_t=\begin{cases}1 & z_t<-h\\-1 & z_t>h\\0 & \text{otherwise}.\end{cases}$$
+$$s_t=\begin{cases}
+1 & z_t < -h \\\\
+-1 & z_t > h \\\\
+0 & \text{otherwise}
+\end{cases}$$
 
 The strategy return is computed as:
 
@@ -116,11 +120,11 @@ where $\boldsymbol\mu$ is the vector of estimated expected returns and $\Sigma$ 
 
 At each eligible date, it takes the **preceding** `LOOKBACK` observations (excluding the current date), estimates historical means and covariance, and adds a small diagonal regularizer:
 
-$$\Sigma_{\mathrm{reg}}=\hat\Sigma+10^{-8}I.$$
+$\Sigma_{\mathrm{reg}}\mathbf{k}=\hat{\boldsymbol{\mu}}$
 
-It solves $\Sigma_{\mathrm{reg}}\mathbf{k}=\hat\boldsymbol\mu$, clips negative components to zero (long-only), and normalizes the nonnegative vector to sum to one. If all components are zero, it uses equal weights. It then blends this Kelly-derived **tilt** with equal weights:
+It solves $\Sigma_{\mathrm{reg}}\mathbf{k}=\hat{\boldsymbol{\mu}}$, clips negative components to zero (long-only), and normalizes the nonnegative vector to sum to one. If all components are zero, it uses equal weights. It then blends this Kelly-derived **tilt** with equal weights:
 
-$$\mathbf{w}_t=0.75\begin{bmatrix}0.5\\0.5\end{bmatrix}+0.25\frac{\max(\mathbf{k},0)}{\sum_j\max(k_j,0)}.$$
+$$\mathbf{w}_t=0.75\begin{bmatrix}0.5\\\\0.5\end{bmatrix}+0.25\frac{\max(\mathbf{k},0)}{\sum_j\max(k_j,0)}.$$
 
 Finally, weights are clipped to the configured bounds and renormalized. Portfolio returns are the weighted sum of same-date strategy returns, using weights estimated exclusively from preceding dates.
 
